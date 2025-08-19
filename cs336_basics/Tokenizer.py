@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple, Optional, Iterable, Iterator
-
+import re
 
 
 class Tokenizer:
@@ -21,11 +21,34 @@ class Tokenizer:
         self.merges = merges
         self.special_tokens = special_tokens or []
 
-
+        # 1. 反向词汇表
         self.inverse_vocab = {v: k for k, v in self.vocab.items()}
-        # 2. 一个集合（set）用于快速查找特殊词元。
+        # 2. 合并规则
+        self.merge_ranks = {merge: i for i, merge in enumerate(self.merges)}
         # 3. 处理特殊词元，将它们添加到词汇表中。
-        ...
+        self.special_tokens_set = set(self.special_tokens)
+        if self.special_tokens:
+            # 如果有特殊词元，我们需要构建一个正则表达式来分割它们
+            # 例如，如果 special_tokens 是 ["<|endoftext|>"]
+            # 这个正则表达式就会变成 "(<|endoftext|>)"
+            # re.escape() 是为了防止特殊词元中包含正则表达式的特殊字符
+            special_pattern = "|".join(map(re.escape, self.special_tokens))
+            self.special_regex = re.compile(f"({special_pattern})")
+            # 将特殊词元也加入到词汇表中
+            for token_str in self.special_tokens:
+                if token_str not in self.inverse_vocab:
+                    # 找到一个还没被使用的ID
+                    new_id = len(self.vocab)
+                    # 将特殊词元编码为 bytes
+                    token_bytes = token_str.encode("utf-8")
+                    # 更新两个词汇表
+                    self.vocab[new_id] = token_bytes
+                    self.inverse_vocab[token_bytes] = new_id
+        else:
+            self.special_regex = None
+            # 4. GPT-2使用的核心预分词正则表达式
+            # 这个复杂的表达式能够很好地处理各种文本情况
+        self.pretokenize_regex = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
     @classmethod
     def from_files(cls, vocab_filepath: str, merges_filepath: str,
