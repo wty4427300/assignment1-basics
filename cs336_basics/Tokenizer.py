@@ -1,5 +1,5 @@
 from typing import Dict, List, Tuple, Optional, Iterable, Iterator
-import re
+import regex as re
 
 
 class Tokenizer:
