@@ -53,3 +53,7 @@ uv run python -c "from cs336_basics.bpe_training import train_bpe; vocab, merges
 *   **预分词:** 一个关键步骤是使用 `cs336_basics/bpe_training.py` 中提供的特定 GPT-2 正则表达式模式进行预分词。训练脚本使用 `ProcessPoolExecutor` 来并行化此步骤以提高效率。
 *   **特殊词元:** 像 `<|endoftext|>` 这样的特殊词元必须被正确处理。它们不受 BPE 合并的影响，并被视为原子单元。
 *   **代码风格:** 代码风格由 `ruff` 强制执行，其配置位于 `pyproject.toml` 中。行长限制为 120 个字符。
+
+## 关键文件
+
+*   作业相关的详细指导和要求，请参阅 `cs336_spring2025_assignment1_basics.pdf`。
