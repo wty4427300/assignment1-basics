@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-import resource
+
+try:
+    import resource
+except ImportError:
+    resource = None
 import sys
 
 import psutil
@@ -37,9 +41,9 @@ def memory_limit(max_mem):
 
 
 def get_tokenizer_from_vocab_merges_path(
-    vocab_path: str | os.PathLike,
-    merges_path: str | os.PathLike,
-    special_tokens: list[str] | None = None,
+        vocab_path: str | os.PathLike,
+        merges_path: str | os.PathLike,
+        special_tokens: list[str] | None = None,
 ):
     gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
     with open(vocab_path) as vocab_f:
