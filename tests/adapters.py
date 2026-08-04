@@ -28,8 +28,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    from cs336_basics.model import Linear
+    module = Linear(d_in, d_out)
+    module.weight.data = weights
+    return module(in_features)
 
 
 def run_embedding(
@@ -50,8 +52,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    from cs336_basics.model import Embedding
+    module = Embedding(vocab_size, d_model)
+    module.weight.data = weights
+    return module(token_ids)
 
 
 def run_swiglu(
