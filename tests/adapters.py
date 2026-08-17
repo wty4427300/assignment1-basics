@@ -203,7 +203,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
 def run_get_batch(
     dataset: npt.NDArray, batch_size: int, context_length: int, device: str
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    max_idx = len(dataset) - context_length - 1
+    max_idx = len(dataset) - context_length
     ix = torch.randint(0, max_idx, (batch_size,))
     x = torch.stack([torch.from_numpy(dataset[i : i + context_length].astype("int64")) for i in ix])
     y = torch.stack([torch.from_numpy(dataset[i + 1 : i + context_length + 1].astype("int64")) for i in ix])

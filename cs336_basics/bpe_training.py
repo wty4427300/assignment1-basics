@@ -42,13 +42,18 @@ def train_bpe(
     else:
         chunks = [text]
 
-    # 3. Parallel pre-tokenization of text chunks
+    # 3. Pre-tokenization of text chunks
     text_chunks = [chunk for chunk in chunks if chunk and chunk not in special_tokens_set]
     word_counts = collections.Counter()
-    with ProcessPoolExecutor() as executor:
-        word_lists = executor.map(_tokenize_chunk, text_chunks)
-        for word_list in word_lists:
-            word_counts.update(word_list)
+    # For small corpus, avoid overhead of ProcessPoolExecutor
+    if len(text) < 1_000_000:
+        for chunk in text_chunks:
+            word_counts.update(_tokenize_chunk(chunk))
+    else:
+        with ProcessPoolExecutor() as executor:
+            word_lists = executor.map(_tokenize_chunk, text_chunks)
+            for word_list in word_lists:
+                word_counts.update(word_list)
 
     # Add back special tokens to word counts
     for chunk in chunks:
@@ -56,8 +61,6 @@ def train_bpe(
             word_counts[chunk] += 1
 
     # 4. Initialize splits
-    # splits 的键是“一个预分词后的词”对应的字节 token 序列，
-    # 值是这个字节 token 序列在语料中出现的频次。
     splits = collections.Counter()
     for word_str, freq in word_counts.items():
         if word_str in special_tokens_set:
@@ -67,13 +70,19 @@ def train_bpe(
     # 5. Main merge loop (optimized)
     merges = []
     num_merges = vocab_size - len(vocab)
-    # pair_stats 先整体统计一次；之后每轮 merge 只增量更新受影响的词，避免反复全量重算。
     pair_stats = get_pair_stats(splits)
+    
+    # pair_to_words maps each pair to the set of words (tuples) containing it.
+    pair_to_words = collections.defaultdict(set)
+    for word in splits:
+        for pair in zip(word, word[1:]):
+            pair_to_words[pair].add(word)
 
     for i in range(num_merges):
         if not pair_stats:
             break
         
+        # Tie-break with the pair itself for determinism
         best_pair = max(pair_stats, key=lambda p: (pair_stats[p], p))
         
         if pair_stats[best_pair] < 1:
@@ -82,51 +91,43 @@ def train_bpe(
         merges.append(best_pair)
         vocab[len(vocab)] = best_pair[0] + best_pair[1]
         
-        # 应用本轮最优 merge，并只更新受影响词的 pair 统计；
-        # 这样比每一轮都重新扫描整个语料更快。
         p1, p2 = best_pair
         merged_token = p1 + p2
         
-        # 只有包含当前 best_pair 的词才会在这一轮发生变化。
-        words_to_update = []
-        for word in splits:
-            if len(word) < 2:
-                continue
-            for j in range(len(word) - 1):
-                if word[j] == p1 and word[j+1] == p2:
-                    words_to_update.append(word)
-                    break
-
-        for word_to_update in words_to_update:
-            if word_to_update not in splits:
-                continue
+        # Only update words that contain the best_pair
+        words_to_process = list(pair_to_words[p1, p2])
+        for word in words_to_process:
+            freq = splits.pop(word)
             
-            freq = splits.pop(word_to_update)
-            
-            # 先把旧词形对应的相邻 pair 贡献从统计里减掉。
-            if len(word_to_update) >= 2:
-                for p in zip(word_to_update, word_to_update[1:]):
-                    pair_stats[p] -= freq
+            # Remove all pairs in the old word from pair_stats and pair_to_words
+            for pair in zip(word, word[1:]):
+                pair_stats[pair] -= freq
+                if word in pair_to_words[pair]:
+                    pair_to_words[pair].remove(word)
 
+            # Perform the merge
             new_word = []
             j = 0
-            while j < len(word_to_update):
-                if j < len(word_to_update) - 1 and word_to_update[j] == p1 and word_to_update[j+1] == p2:
+            while j < len(word):
+                if j < len(word) - 1 and word[j] == p1 and word[j+1] == p2:
                     new_word.append(merged_token)
                     j += 2
                 else:
-                    new_word.append(word_to_update[j])
+                    new_word.append(word[j])
                     j += 1
             new_word = tuple(new_word)
+            
             splits[new_word] += freq
+            # Add new pairs to pair_stats and pair_to_words
+            for pair in zip(new_word, new_word[1:]):
+                pair_stats[pair] += freq
+                pair_to_words[pair].add(new_word)
 
-            # 再把新词形对应的相邻 pair 贡献加回去。
-            if len(new_word) >= 2:
-                for p in zip(new_word, new_word[1:]):
-                    pair_stats[p] += freq
-
-        # 当前选中的 pair 已经被合并，不再作为下一轮候选。
-        del pair_stats[best_pair]
+        # The best_pair itself is no longer a candidate
+        if best_pair in pair_stats:
+            del pair_stats[best_pair]
+        if best_pair in pair_to_words:
+            del pair_to_words[best_pair]
 
     return vocab, merges
 
